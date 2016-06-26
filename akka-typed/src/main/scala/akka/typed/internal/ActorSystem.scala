@@ -8,7 +8,7 @@ import com.typesafe.config.Config
 import scala.concurrent.ExecutionContext
 import java.util.concurrent.ThreadFactory
 import scala.concurrent.{ ExecutionContextExecutor, Future }
-import akka.{ actor => a, dispatch => d, event => e }
+import akka.{ actor ⇒ a, dispatch ⇒ d, event ⇒ e }
 import scala.util.control.NonFatal
 import scala.util.control.ControlThrowable
 import scala.collection.immutable
@@ -50,12 +50,12 @@ Distributed Data:
  *
  */
 
-private[typed] class ActorSystemImpl[T](override val name: String,
-                                        _config: Config,
-                                        _cl: ClassLoader,
-                                        _ec: Option[ExecutionContext],
-                                        _p: Props[T])
-    extends ActorRef[T](a.RootActorPath(a.Address("akka", name)) / "user") with ActorSystem[T] with ScalaActorRef[T] {
+private[typed] class ActorSystemImpl[-T](override val name: String,
+                                         _config: Config,
+                                         _cl: ClassLoader,
+                                         _ec: Option[ExecutionContext],
+                                         _p: Props[T])
+  extends ActorRef[T](a.RootActorPath(a.Address("akka", name)) / "user") with ActorSystem[T] with ScalaActorRef[T] with ActorRefImpl[T] {
 
   if (!name.matches("""^[a-zA-Z0-9][a-zA-Z0-9-_]*$"""))
     throw new IllegalArgumentException(
@@ -101,7 +101,7 @@ private[typed] class ActorSystemImpl[T](override val name: String,
   override val dynamicAccess: a.DynamicAccess = new a.ReflectiveDynamicAccess(_cl)
 
   // this provides basic logging (to stdout) until .start() is called below
-  override val eventStream = new e.EventStream((p, n) => systemActorOf(p, n), settings.DebugEventStream)
+  override val eventStream = new e.EventStream((p, n) ⇒ systemActorOf(p, n), settings.DebugEventStream)
   eventStream.startStdoutLogger(settings)
 
   override val logFilter: e.LoggingFilter = {
@@ -140,6 +140,9 @@ private[typed] class ActorSystemImpl[T](override val name: String,
   override def deadLetters[U]: ActorRefImpl[U] = ???
 
   override def tell(msg: T): Unit = ???
+  override def system: ActorSystemImpl[Nothing] = this
+  override def sendSystem(msg: SystemMessage): Unit = ???
+  override def isLocal: Boolean = true
 
   def systemActorOf(props: a.Props, name: String): Future[a.ActorRef] = ???
   def systemActorOf[U](props: Props[U], name: String): Future[ActorRef[U]] = ???

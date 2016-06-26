@@ -10,13 +10,14 @@ import scala.concurrent.duration.{ Duration, FiniteDuration }
 import akka.dispatch.ExecutionContexts
 import scala.concurrent.ExecutionContextExecutor
 import akka.actor.Cancellable
-import akka.util.Unsafe.{ instance => unsafe }
+import akka.util.Unsafe.{ instance ⇒ unsafe }
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.Queue
 import scala.annotation.{ tailrec, switch }
 import scala.util.control.NonFatal
 import scala.util.control.Exception.Catcher
 import akka.event.Logging.Error
+import akka.event.Logging
 
 /**
  * INTERNAL API
@@ -62,15 +63,16 @@ private[typed] object ActorCell {
  * INTERNAL API
  */
 private[typed] class ActorCell[T](override val system: ActorSystemImpl[Nothing],
-                                  override val props: Props[T])
-    extends ActorContext[T] with Runnable {
+                                  override val props: Props[T],
+                                  val parent: ActorRefImpl[Nothing])
+  extends ActorContext[T] with Runnable with SupervisionMechanics[T] with DeathWatch[T] {
 
   /*
    * Implementation of the ActorContext trait.
    */
 
-  private var childrenMap = Map.empty[String, ActorRef[Nothing]]
-  private var terminatingMap = Map.empty[String, ActorRef[Nothing]]
+  protected var childrenMap = Map.empty[String, ActorRefImpl[Nothing]]
+  protected var terminatingMap = Map.empty[String, ActorRefImpl[Nothing]]
   override def children: Iterable[ActorRef[Nothing]] = childrenMap.values
   override def child(name: String): Option[ActorRef[Nothing]] = childrenMap.get(name)
 
@@ -78,10 +80,12 @@ private[typed] class ActorCell[T](override val system: ActorSystemImpl[Nothing],
   private[typed] def setSelf(ref: ActorRefImpl[T]): Unit = _self = ref
   override def self: ActorRefImpl[T] = _self
 
+  protected def ctx: ActorContext[T] = this
+
   override def spawn[U](props: Props[U], name: String): ActorRef[U] = {
     if (childrenMap contains name) throw new InvalidActorNameException(s"actor name [$name] is not unique")
     if (terminatingMap contains name) throw new InvalidActorNameException(s"actor name [$name] is not yet free")
-    val cell = new ActorCell[U](system, props)
+    val cell = new ActorCell[U](system, props, self)
     val ref = new LocalActorRef[U](self.path / name, cell)
     cell.setSelf(ref)
     ref.sendSystem(Create())
@@ -98,28 +102,23 @@ private[typed] class ActorCell[T](override val system: ActorSystemImpl[Nothing],
   override def stop(child: ActorRef[Nothing]): Boolean = {
     val name = child.path.name
     childrenMap get name match {
-      case None                      => false
-      case Some(ref) if ref != child => false
-      case Some(ref) =>
-        ref.toImplN.sendSystem(Terminate())
+      case None                      ⇒ false
+      case Some(ref) if ref != child ⇒ false
+      case Some(ref) ⇒
+        ref.sendSystem(Terminate())
         childrenMap -= name
-        terminatingMap = terminatingMap.updated(name, child)
+        terminatingMap = terminatingMap.updated(name, ref)
         true
     }
   }
 
-  override def watch[U](target: ActorRef[U]): ActorRef[U] = {
-    target.toImpl.sendSystem(Watch(target, self))
-    target
+  protected def stopAll(): Unit = {
+    childrenMap.valuesIterator.foreach { ref ⇒
+      ref.sendSystem(Terminate())
+      terminatingMap = terminatingMap.updated(ref.path.name, ref)
+    }
+    childrenMap = Map.empty
   }
-
-  override def unwatch[U](target: ActorRef[U]): ActorRef[U] = {
-    target.toImpl.sendSystem(Unwatch(target, self))
-    target
-  }
-
-  private var receiveTimeout: Duration = Duration.Undefined
-  override def setReceiveTimeout(d: Duration): Unit = receiveTimeout = d
 
   override def schedule[U](delay: FiniteDuration, target: ActorRef[U], msg: U): Cancellable =
     system.scheduler.scheduleOnce(delay)(target ! msg)(ExecutionContexts.sameThreadExecutionContext)
@@ -128,6 +127,8 @@ private[typed] class ActorCell[T](override val system: ActorSystemImpl[Nothing],
 
   override def spawnAdapter[U](f: U ⇒ T): ActorRef[U] = ???
 
+  override def setReceiveTimeout(d: Duration): Unit = ???
+
   /*
    * Implementation of the invocation mechanics.
    */
@@ -135,30 +136,43 @@ private[typed] class ActorCell[T](override val system: ActorSystemImpl[Nothing],
 
   // see comment in companion object for details
   @volatile private[this] var _status: Int = 0
+  protected def getStatus: Int = _status
   private[this] val queue: Queue[T] = new ConcurrentLinkedQueue[T]
   private[this] val maxQueue: Int = Math.min(props.queueSize, maxActivations)
   private[this] var _systemQueue: LatestFirstSystemMessageList = SystemMessageList.LNil
 
-  def send(msg: T): Unit = {
-    val old = unsafe.getAndAddInt(this, status, 1)
-    val oldActivations = activations(old)
-    // this is not an off-by-one: #msgs is activations-1 if >0
-    if (oldActivations > maxQueue) {
-      // cannot enqueue, need to give back activation token
-      unsafe.getAndAddInt(this, status, -1)
-      system.eventStream.publish(Dropped(msg, self))
-    } else if (isClosed(old)) {
-      system.deadLetters ! msg
-    } else {
-      // need to enqueue; if the actor sees the token but not the message, it will reschedule
-      queue.add(msg)
-      if (oldActivations == 0 && isActive(old)) {
-        unsafe.getAndAddInt(this, status, 1) // the first 1 was just the “active” bit, now add 1msg
-        // if the actor was not yet running, set it in motion; spurious wakeups don’t hurt
-        executionContext.execute(this)
-      }
-    }
+  protected def suspend(): Unit = unsafe.getAndAddInt(this, status, suspendIncrement)
+  protected def resume(): Unit = unsafe.getAndAddInt(this, status, -suspendIncrement)
+
+  private def handleException: Catcher[Unit] = {
+    case e: InterruptedException ⇒
+      system.eventStream.publish(Error(e, self.path.toString, getClass, "interrupted during message send"))
+      Thread.currentThread.interrupt()
+    case NonFatal(e) ⇒
+      system.eventStream.publish(Error(e, self.path.toString, getClass, "swallowing exception during message send"))
   }
+
+  def send(msg: T): Unit =
+    try {
+      val old = unsafe.getAndAddInt(this, status, 1)
+      val oldActivations = activations(old)
+      // this is not an off-by-one: #msgs is activations-1 if >0
+      if (oldActivations > maxQueue) {
+        // cannot enqueue, need to give back activation token
+        unsafe.getAndAddInt(this, status, -1)
+        system.eventStream.publish(Dropped(msg, self))
+      } else if (isClosed(old)) {
+        system.deadLetters ! msg
+      } else {
+        // need to enqueue; if the actor sees the token but not the message, it will reschedule
+        queue.add(msg)
+        if (oldActivations == 0 && isActive(old)) {
+          unsafe.getAndAddInt(this, status, 1) // the first 1 was just the “active” bit, now add 1msg
+          // if the actor was not yet running, set it in motion; spurious wakeups don’t hurt
+          executionContext.execute(this)
+        }
+      }
+    } catch handleException
 
   def sendSystem(signal: SystemMessage): Unit = {
     @tailrec def needToActivate(): Boolean = {
@@ -173,18 +187,20 @@ private[typed] class ActorCell[T](override val system: ActorSystemImpl[Nothing],
         }
       }
     }
-    if (needToActivate()) {
-      val old = unsafe.getAndAddInt(this, status, 1)
-      if (isClosed(old)) {
-        // nothing to do
-      } else if (activations(old) == 0) {
-        // all is good: we signaled the transition to active
-        executionContext.execute(this)
-      } else {
-        // take back that token: we didn’t actually enqueue a normal message and the actor was already active
-        unsafe.getAndAddInt(this, status, -1)
+    try {
+      if (needToActivate()) {
+        val old = unsafe.getAndAddInt(this, status, 1)
+        if (isClosed(old)) {
+          // nothing to do
+        } else if (activations(old) == 0) {
+          // all is good: we signaled the transition to active
+          executionContext.execute(this)
+        } else {
+          // take back that token: we didn’t actually enqueue a normal message and the actor was already active
+          unsafe.getAndAddInt(this, status, -1)
+        }
       }
-    }
+    } catch handleException
   }
 
   override final def run(): Unit = {
@@ -215,9 +231,9 @@ private[typed] class ActorCell[T](override val system: ActorSystemImpl[Nothing],
     }
   }
 
-  private[this] var behavior: Behavior[T] = _
+  protected var behavior: Behavior[T] = _
 
-  private def next(b: Behavior[T], msg: Any): Unit = {
+  protected def next(b: Behavior[T], msg: Any): Unit = {
     if (Behavior.isUnhandled(b)) unhandled(msg)
     behavior = Behavior.canonicalize(b, behavior)
     if (!Behavior.isAlive(behavior)) self.sendSystem(Terminate())
@@ -288,96 +304,8 @@ private[typed] class ActorCell[T](override val system: ActorSystemImpl[Nothing],
     continue
   }
 
-  private[this] var sysmsgStash: LatestFirstSystemMessageList = SystemMessageList.LNil
+  // logging is not the main purpose, and if it fails there’s nothing we can do
+  protected final def publish(e: Logging.LogEvent): Unit = try system.eventStream.publish(e) catch { case NonFatal(_) ⇒ }
 
-  protected def stash(msg: SystemMessage): Unit = {
-    assert(msg.unlinked)
-    sysmsgStash ::= msg
-  }
-
-  private def unstashAll(): LatestFirstSystemMessageList = {
-    val unstashed = sysmsgStash
-    sysmsgStash = SystemMessageList.LNil
-    unstashed
-  }
-
-  /**
-   * Process one system message and return whether further messages shall be processed.
-   */
-  private def processSignal(sysmsg: SystemMessage): Boolean = {
-    /*
-     * When recreate/suspend/resume are received while restarting (i.e. between
-     * preRestart and postRestart, waiting for children to terminate), these
-     * must not be executed immediately, but instead queued and released after
-     * finishRecreate returns. This can only ever be triggered by
-     * ChildTerminated, and ChildTerminated is not one of the queued message
-     * types (hence the overwrite further down). Mailbox sets message.next=null
-     * before systemInvoke, so this will only be non-null during such a replay.
-     */
-
-    def calculateState: Int =
-      if (terminatingMap.nonEmpty) SuspendedWaitForChildrenState
-      else if (isSuspended(_status)) SuspendedState
-      else DefaultState
-
-    @tailrec def sendAllToDeadLetters(messages: EarliestFirstSystemMessageList): Unit =
-      if (messages.nonEmpty) {
-        val tail = messages.tail
-        val msg = messages.head
-        msg.unlink()
-        system.deadLetters.sendSystem(msg)
-        sendAllToDeadLetters(tail)
-      }
-
-    def shouldStash(m: SystemMessage, state: Int): Boolean =
-      (state: @switch) match {
-        case DefaultState                  ⇒ false
-        case SuspendedState                ⇒ m.isInstanceOf[StashWhenFailed]
-        case SuspendedWaitForChildrenState ⇒ m.isInstanceOf[StashWhenWaitingForChildren]
-      }
-
-    @tailrec
-    def invokeAll(messages: EarliestFirstSystemMessageList, currentState: Int): Boolean = {
-      val rest = messages.tail
-      val message = messages.head
-      message.unlink()
-      try {
-        message match {
-          case message: SystemMessage if shouldStash(message, currentState) ⇒ stash(message)
-          case f: Failed ⇒ //handleFailure(f)
-          case DeathWatchNotification(a, at) ⇒ //watchedActorTerminated(a, at)
-          case Create() ⇒ //create()
-          case Watch(watchee, watcher) ⇒ //addWatcher(watchee, watcher)
-          case Unwatch(watchee, watcher) ⇒ //remWatcher(watchee, watcher)
-          case Recreate(cause) ⇒ //faultRecreate(cause)
-          case Suspend() ⇒ //faultSuspend()
-          case Resume(inRespToFailure) ⇒ //faultResume(inRespToFailure)
-          case Terminate() ⇒ //terminate()
-          case NoMessage ⇒ // only here to suppress warning
-        }
-      } catch handleNonFatalOrInterruptedException { e ⇒
-        //handleInvokeFailure(Nil, e)
-      }
-      val newState = calculateState
-      // As each state accepts a strict subset of another state, it is enough to unstash if we "walk up" the state
-      // chain
-      val todo = if (newState < currentState) unstashAll() reverse_::: rest else rest
-
-      if (isClosed(_status)) {
-        sendAllToDeadLetters(todo)
-        true
-      } else if (todo.nonEmpty) invokeAll(todo, newState)
-      else false
-    }
-
-    invokeAll(new EarliestFirstSystemMessageList(sysmsg), calculateState)
-  }
-
-  final protected def handleNonFatalOrInterruptedException(thunk: (Throwable) ⇒ Unit): Catcher[Unit] = {
-    case e: InterruptedException ⇒
-      thunk(e)
-      Thread.currentThread().interrupt()
-    case NonFatal(e) ⇒
-      thunk(e)
-  }
+  protected final def clazz(o: AnyRef): Class[_] = if (o eq null) this.getClass else o.getClass
 }

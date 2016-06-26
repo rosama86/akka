@@ -31,7 +31,7 @@ object Effect {
  * on it and otherwise stubs them out like a [[StubbedActorContext]].
  */
 class EffectfulActorContext[T](_name: String, _props: Props[T], _system: ActorSystem[Nothing])
-    extends StubbedActorContext[T](_name, _props)(_system) {
+  extends StubbedActorContext[T](_name, _props)(_system) {
   import akka.{ actor ⇒ a }
   import Effect._
 
@@ -76,14 +76,6 @@ class EffectfulActorContext[T](_name: String, _props: Props[T], _system: ActorSy
   }
   override def unwatch[U](other: ActorRef[U]): ActorRef[U] = {
     effectQueue.offer(Unwatched(other))
-    super.unwatch(other)
-  }
-  override def watch(other: akka.actor.ActorRef): other.type = {
-    effectQueue.offer(Watched(ActorRef[Any](other)))
-    super.watch(other)
-  }
-  override def unwatch(other: akka.actor.ActorRef): other.type = {
-    effectQueue.offer(Unwatched(ActorRef[Any](other)))
     super.unwatch(other)
   }
   override def setReceiveTimeout(d: Duration): Unit = {

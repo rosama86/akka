@@ -1,6 +1,9 @@
 package akka.typed
 
 package object internal {
+  /*
+   * These are safe due to the self-type of ActorRef
+   */
   implicit class ToImpl[U](val ref: ActorRef[U]) extends AnyVal {
     def toImpl: ActorRefImpl[U] = ref.asInstanceOf[ActorRefImpl[U]]
   }

@@ -260,11 +260,11 @@ class ActorContextSpec extends TypedSpec(ConfigFactory.parseString(
           Failed.Restart
       }.expectMessage(expectTimeout) {
         case (msg, (subj, log)) ⇒
-          msg should ===(GotSignal(PreRestart(ex)))
+          msg should ===(GotSignal(PreRestart))
           log.assertDone(expectTimeout)
           subj
       }.expectMessage(expectTimeout) { (msg, subj) ⇒
-        msg should ===(GotSignal(PostRestart(ex)))
+        msg should ===(GotSignal(PostRestart))
         ctx.stop(subj)
       }.expectMessage(expectTimeout) { (msg, _) ⇒
         msg should ===(GotSignal(PostStop))
@@ -292,8 +292,8 @@ class ActorContextSpec extends TypedSpec(ConfigFactory.parseString(
         case (msgs, (subj, child, log)) ⇒
           msgs should ===(
             GotSignal(Failed(`ex`, `child`)) ::
-              ChildEvent(GotSignal(PreRestart(`ex`))) ::
-              ChildEvent(GotSignal(PostRestart(`ex`))) :: Nil)
+              ChildEvent(GotSignal(PreRestart)) ::
+              ChildEvent(GotSignal(PostRestart)) :: Nil)
           log.assertDone(expectTimeout)
           child ! BecomeInert(self) // necessary to avoid PostStop/Terminated interference
           (subj, child)
@@ -343,7 +343,7 @@ class ActorContextSpec extends TypedSpec(ConfigFactory.parseString(
             Failed.Restart
         }.expectMessage(expectTimeout) {
           case (msg, (subj, log)) ⇒
-            msg should ===(GotSignal(PostRestart(ex)))
+            msg should ===(GotSignal(PostRestart))
             log.assertDone(expectTimeout)
             subj
         }.stimulate(_ ! Ping(self), _ ⇒ Pong1)

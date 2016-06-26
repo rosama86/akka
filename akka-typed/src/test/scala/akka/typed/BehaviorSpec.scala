@@ -111,19 +111,19 @@ class BehaviorSpec extends TypedSpec {
     }
 
     def `must react to PreRestart`(): Unit = {
-      mkCtx().check(PreRestart(ex))
+      mkCtx().check(PreRestart)
     }
 
     def `must react to PreRestart after a message`(): Unit = {
-      mkCtx().check(GetSelf).check(PreRestart(ex))
+      mkCtx().check(GetSelf).check(PreRestart)
     }
 
     def `must react to PostRestart`(): Unit = {
-      mkCtx().check(PostRestart(ex))
+      mkCtx().check(PostRestart)
     }
 
     def `must react to a message after PostRestart`(): Unit = {
-      mkCtx().check(PostRestart(ex)).check(GetSelf)
+      mkCtx().check(PostRestart).check(GetSelf)
     }
 
     def `must react to Failed`(): Unit = {
@@ -229,15 +229,15 @@ class BehaviorSpec extends TypedSpec {
     }
 
     def `must react to PreRestart after swap`(): Unit = {
-      mkCtx().check(Swap).check(PreRestart(ex))
+      mkCtx().check(Swap).check(PreRestart)
     }
 
     def `must react to PreRestart after a message after swap`(): Unit = {
-      mkCtx().check(Swap).check(GetSelf).check(PreRestart(ex))
+      mkCtx().check(Swap).check(GetSelf).check(PreRestart)
     }
 
     def `must react to a message after PostRestart after swap`(): Unit = {
-      mkCtx().check(PostRestart(ex)).check(Swap).check(GetSelf)
+      mkCtx().check(PostRestart).check(Swap).check(GetSelf)
     }
 
     def `must react to Failed after swap`(): Unit = {

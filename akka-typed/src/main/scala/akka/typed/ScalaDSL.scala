@@ -134,14 +134,14 @@ object ScalaDSL {
   final case class Full[T](behavior: PartialFunction[MessageOrSignal[T], Behavior[T]]) extends Behavior[T] {
     override def management(ctx: ActorContext[T], msg: Signal): Behavior[T] = {
       lazy val fallback: (MessageOrSignal[T]) ⇒ Behavior[T] = {
-        case Sig(context, PreRestart(_)) ⇒
+        case Sig(context, PreRestart) ⇒
           context.children foreach { child ⇒
             context.unwatch[Nothing](child)
             context.stop(child)
           }
           behavior.applyOrElse(Sig(context, PostStop), fallback)
-        case Sig(context, PostRestart(_)) ⇒ behavior.applyOrElse(Sig(context, PreStart), fallback)
-        case _                            ⇒ Unhandled
+        case Sig(context, PostRestart) ⇒ behavior.applyOrElse(Sig(context, PreStart), fallback)
+        case _                         ⇒ Unhandled
       }
       behavior.applyOrElse(Sig(ctx, msg), fallback)
     }

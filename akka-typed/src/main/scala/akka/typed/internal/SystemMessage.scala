@@ -196,64 +196,35 @@ private[typed] sealed trait SystemMessage extends Serializable {
 /**
  * INTERNAL API
  */
-private[typed] trait StashWhenWaitingForChildren
-
-/**
- * INTERNAL API
- */
-private[typed] trait StashWhenFailed
-
-/**
- * INTERNAL API
- */
 @SerialVersionUID(1L)
-private[typed] final case class Create() extends SystemMessage // sent to self from Dispatcher.register
-/**
- * INTERNAL API
- */
-@SerialVersionUID(1L)
-private[typed] final case class Recreate(cause: Throwable) extends SystemMessage with StashWhenWaitingForChildren // sent to self from ActorCell.restart
-/**
- * INTERNAL API
- */
-@SerialVersionUID(1L)
-private[typed] final case class Suspend() extends SystemMessage with StashWhenWaitingForChildren // sent to self from ActorCell.suspend
-/**
- * INTERNAL API
- */
-@SerialVersionUID(1L)
-private[typed] final case class Resume(causedByFailure: Throwable) extends SystemMessage with StashWhenWaitingForChildren // sent to self from ActorCell.resume
-/**
- * INTERNAL API
- */
-@SerialVersionUID(1L)
-private[typed] final case class Terminate() extends SystemMessage // sent to child from ActorCell.stop
+private[typed] final case class Create() extends SystemMessage
 
 /**
  * INTERNAL API
  */
 @SerialVersionUID(1L)
-private[typed] final case class Watch(watchee: ActorRef[Nothing], watcher: ActorRef[Nothing]) extends SystemMessage // sent to establish a DeathWatch
+private[typed] final case class Terminate() extends SystemMessage
+
 /**
  * INTERNAL API
  */
-@SerialVersionUID(1L) // Watch and Unwatch have different signatures, but this can't be changed without breaking serialization compatibility
-private[typed] final case class Unwatch(watchee: ActorRef[Nothing], watcher: ActorRef[Nothing]) extends SystemMessage // sent to tear down a DeathWatch
+@SerialVersionUID(1L)
+private[typed] final case class Watch(watchee: ActorRef[Nothing], watcher: ActorRef[Nothing]) extends SystemMessage
+
+/**
+ * INTERNAL API
+ */
+@SerialVersionUID(1L)
+private[typed] final case class Unwatch(watchee: ActorRef[Nothing], watcher: ActorRef[Nothing]) extends SystemMessage
+
+/**
+ * INTERNAL API
+ */
+@SerialVersionUID(1L)
+private[akka] final case class DeathWatchNotification(actor: ActorRef[Nothing], failureCause: Throwable) extends SystemMessage
+
 /**
  * INTERNAL API
  */
 @SerialVersionUID(1L)
 private[akka] case object NoMessage extends SystemMessage // switched into the mailbox to signal termination
-
-/**
- * INTERNAL API
- */
-@SerialVersionUID(1L)
-private[akka] final case class Failed(child: ActorRef[Nothing], cause: Throwable, uid: Int) extends SystemMessage
-  with StashWhenFailed
-  with StashWhenWaitingForChildren
-
-@SerialVersionUID(1L)
-private[akka] final case class DeathWatchNotification(
-  actor: ActorRef[Nothing],
-  addressTerminated: Boolean) extends SystemMessage

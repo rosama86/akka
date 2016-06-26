@@ -26,9 +26,9 @@ object EventStream {
  * The debug flag in the constructor toggles if operations on this EventStream should also be published
  * as Debug-Events
  */
-class EventStream(systemActorOf: (Props, String) => Unit, val debug: Boolean) extends LoggingBus with SubchannelClassification {
+class EventStream(systemActorOf: (Props, String) ⇒ Unit, val debug: Boolean) extends LoggingBus with SubchannelClassification {
 
-  def this(sys: (Props, String) => Unit) = this(sys, debug = false)
+  def this(sys: (Props, String) ⇒ Unit) = this(sys, debug = false)
 
   @deprecated("Use constructor with ActorSystem parameter", "2.4")
   def this(debug: Boolean = false) = this(systemActorOf = null, debug)

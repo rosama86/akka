@@ -17,7 +17,7 @@ import scala.concurrent.{ ExecutionContextExecutor, Future }
  * A system also implements the [[ActorRef]] type, and sending a message to
  * the system directs that message to the root Actor.
  */
-trait ActorSystem[-T] extends ActorRef[T] { this: ScalaActorRef[T] ⇒
+trait ActorSystem[-T] extends ActorRef[T] { this: ScalaActorRef[T] with internal.ActorRefImpl[T] ⇒
 
   /**
    * The name of this actor system, used to distinguish multiple ones within

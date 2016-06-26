@@ -97,7 +97,7 @@ final case class ActorIdentity(correlationId: Any, ref: Option[ActorRef]) {
 final case class Terminated private[akka] (@BeanProperty actor: ActorRef)(
   @BeanProperty val existenceConfirmed: Boolean,
   @BeanProperty val addressTerminated: Boolean)
-    extends AutoReceivedMessage with PossiblyHarmful with DeadLetterSuppression
+  extends AutoReceivedMessage with PossiblyHarmful with DeadLetterSuppression
 
 /**
  * INTERNAL API
@@ -164,7 +164,7 @@ final case class InvalidActorNameException(message: String) extends AkkaExceptio
  */
 @SerialVersionUID(1L)
 class ActorInitializationException protected (actor: ActorRef, message: String, cause: Throwable)
-    extends AkkaException(ActorInitializationException.enrichedMessage(actor, message), cause) {
+  extends AkkaException(ActorInitializationException.enrichedMessage(actor, message), cause) {
   def getActor: ActorRef = actor
 }
 object ActorInitializationException {

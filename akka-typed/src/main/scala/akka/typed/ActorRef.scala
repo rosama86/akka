@@ -16,7 +16,7 @@ import language.implicitConversions
  * [[akka.event.EventStream]] on a best effort basis
  * (i.e. this delivery is not reliable).
  */
-abstract class ActorRef[-T](_path: ActorPath) extends java.lang.Comparable[ActorRef[Any]] { this: ScalaActorRef[T] ⇒
+abstract class ActorRef[-T](_path: ActorPath) extends java.lang.Comparable[ActorRef[Any]] { this: ScalaActorRef[T] with internal.ActorRefImpl[T] ⇒
   /**
    * Send a message to the Actor referenced by this ActorRef using *at-most-once*
    * messaging semantics.
@@ -72,9 +72,9 @@ trait ScalaActorRef[-T] { this: ActorRef[T] ⇒
 }
 
 object ActorRef {
-  private class Combined[T](val untypedRef: akka.actor.ActorRef) extends ActorRef[T](untypedRef.path) with ScalaActorRef[T] {
-    override def tell(msg: T): Unit = untypedRef.tell(msg, akka.actor.Actor.noSender)
-  }
+  //  private class Combined[T](val untypedRef: akka.actor.ActorRef) extends ActorRef[T](untypedRef.path) with ScalaActorRef[T] with internal.ActorRefImpl[T] {
+  //    override def tell(msg: T): Unit = untypedRef.tell(msg, akka.actor.Actor.noSender)
+  //  }
 
   implicit def toScalaActorRef[T](ref: ActorRef[T]): ScalaActorRef[T] = ref.asInstanceOf[ScalaActorRef[T]]
 
@@ -84,5 +84,5 @@ object ActorRef {
    * untyped Actors within the typed world, given that they implement the assumed
    * protocol.
    */
-  def apply[T](ref: akka.actor.ActorRef): ActorRef[T] = new Combined[T](ref)
+  //  def apply[T](ref: akka.actor.ActorRef): ActorRef[T] = new Combined[T](ref)
 }

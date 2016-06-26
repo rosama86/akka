@@ -23,7 +23,7 @@ object Inbox {
       override def !(msg: Any)(implicit sender: akka.actor.ActorRef) = q.offer(msg.asInstanceOf[T])
     }
 
-    val ref: ActorRef[T] = ActorRef(r)
+    val ref: ActorRef[T] = ??? // ActorRef(r)
     def receiveMsg(): T = q.poll() match {
       case null ⇒ throw new NoSuchElementException(s"polling on an empty inbox: $name")
       case x    ⇒ x

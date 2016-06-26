@@ -70,17 +70,6 @@ trait ActorContext[T] {
   def spawn[U](props: Props[U], name: String): ActorRef[U]
 
   /**
-   * Create an untyped child Actor from the given [[akka.actor.Props]] under a randomly chosen name.
-   * It is good practice to name Actors wherever practical.
-   */
-  //def actorOf(props: untyped.Props): untyped.ActorRef
-
-  /**
-   * Create an untyped child Actor from the given [[akka.actor.Props]] and with the given name.
-   */
-  //def actorOf(props: untyped.Props, name: String): untyped.ActorRef
-
-  /**
    * Force the child Actor under the given name to terminate after it finishes
    * processing its current message. Nothing happens if the ActorRef does not
    * refer to a current child actor.
@@ -155,9 +144,9 @@ trait ActorContext[T] {
  * See [[EffectfulActorContext]] for more advanced uses.
  */
 class StubbedActorContext[T](
-    val name: String,
-    override val props: Props[T])(
-        override implicit val system: ActorSystem[Nothing]) extends ActorContext[T] {
+  val name: String,
+  override val props: Props[T])(
+    override implicit val system: ActorSystem[Nothing]) extends ActorContext[T] {
 
   val inbox = Inbox.sync[T](name)
   override val self = inbox.ref

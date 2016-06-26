@@ -30,7 +30,7 @@ final case object PreStart extends Signal
  * behavior that failed).
  */
 @SerialVersionUID(1L)
-final case class PreRestart(failure: Throwable) extends Signal
+final case object PreRestart extends Signal
 
 /**
  * Lifecycle signal that is fired upon restart of the Actor after replacing
@@ -38,7 +38,7 @@ final case class PreRestart(failure: Throwable) extends Signal
  * fresh replacement behavior).
  */
 @SerialVersionUID(1L)
-final case class PostRestart(failure: Throwable) extends Signal
+final case object PostRestart extends Signal
 
 /**
  * Lifecycle signal that is fired after this actor and all its child actors
@@ -70,6 +70,14 @@ final case class Failed(cause: Throwable, child: ActorRef[Nothing]) extends Sign
     case x    ⇒ x
   }
 }
+
+/**
+ * Lifecycle signal that is fired when a direct child actor failed during
+ * creation, which means that it has been terminated. If the child actor is
+ * also being watched, a [[Terminated]] signal will also be raised afterwards.
+ */
+@SerialVersionUID(1L)
+final case class FailedTerminated(child: ActorRef[Nothing]) extends Signal
 
 /**
  * The actor can register for a notification in case no message is received

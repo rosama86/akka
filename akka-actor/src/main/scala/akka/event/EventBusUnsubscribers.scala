@@ -66,7 +66,7 @@ private[akka] object EventStreamUnsubscriber {
   private def props(eventStream: EventStream, debug: Boolean) =
     Props(classOf[EventStreamUnsubscriber], eventStream, debug)
 
-  def start(systemActorOf: (Props, String) => Unit, stream: EventStream): Unit = {
+  def start(systemActorOf: (Props, String) ⇒ Unit, stream: EventStream): Unit = {
     systemActorOf(props(stream, stream.debug), "eventStreamUnsubscriber-" + unsubscribersCount.incrementAndGet())
   }
 
