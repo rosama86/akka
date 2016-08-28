@@ -16,6 +16,7 @@ import scala.util.{ Failure, Success, Try }
 import scala.annotation.tailrec
 import scala.collection.immutable
 import akka.parboiled2.util.Base64
+import akka.event.Logging
 import akka.http.impl.util._
 import akka.http.javadsl.{ model ⇒ jm }
 import akka.http.scaladsl.model._
@@ -39,8 +40,14 @@ sealed abstract class ModeledCompanion[T: ClassTag] extends Renderable {
 /** INTERNAL API */
 private[akka] object ModeledCompanion {
   def nameFromClass[T](clazz: Class[T]): String = {
-    val name = clazz.getSimpleName.replace("$minus", "-")
-    if (name.last == '$') name.dropRight(1) // trailing $
+    val name = {
+      val n = Logging.simpleName(clazz).replace("$minus", "-")
+      if (n.last == '$') n.dropRight(1) // drop trailing $
+      else n
+    }
+
+    val dollarIndex = name.indexOf('$')
+    if (dollarIndex != -1) name.drop(dollarIndex + 1)
     else name
   }
 }
@@ -370,7 +377,8 @@ object `Content-Length` extends ModeledCompanion[`Content-Length`]
  * Instances of this class will only be created transiently during header parsing and will never appear
  * in HttpMessage.header. To access the Content-Length, see subclasses of HttpEntity.
  */
-final case class `Content-Length` private[http] (length: Long) extends RequestResponseHeader {
+final case class `Content-Length` private[http] (length: Long) extends jm.headers.ContentLength
+  with RequestResponseHeader {
   def renderValue[R <: Rendering](r: R): r.type = r ~~ length
   protected def companion = `Content-Length`
 }

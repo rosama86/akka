@@ -11,7 +11,7 @@ import akka.http.javadsl.model.Uri;
 import akka.http.javadsl.model.headers.RawHeader;
 import akka.http.javadsl.model.headers.XForwardedFor;
 import akka.http.javadsl.model.headers.XRealIp;
-import akka.http.javadsl.server.Unmarshaller;
+import akka.http.javadsl.unmarshalling.Unmarshaller;
 import akka.http.javadsl.testkit.JUnitRouteTest;
 import akka.http.javadsl.testkit.TestRoute;
 import org.junit.Test;
@@ -72,7 +72,7 @@ public class MiscDirectivesTest extends JUnitRouteTest {
 
     route
       .run(HttpRequest.create())
-      .assertStatusCode(StatusCodes.NOT_FOUND);
+      .assertStatusCode(StatusCodes.OK);
   }
 
   @Test

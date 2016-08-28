@@ -350,10 +350,17 @@ final case class RunnableGraph[+Mat](val module: StreamLayout.Module) extends Gr
    */
   def run()(implicit materializer: Materializer): Mat = materializer.materialize(this)
 
+  override def addAttributes(attr: Attributes): RunnableGraph[Mat] =
+    withAttributes(module.attributes and attr)
+
   override def withAttributes(attr: Attributes): RunnableGraph[Mat] =
     new RunnableGraph(module.withAttributes(attr))
 
-  override def named(name: String): RunnableGraph[Mat] = withAttributes(Attributes.name(name))
+  override def named(name: String): RunnableGraph[Mat] =
+    addAttributes(Attributes.name(name))
+
+  override def async: RunnableGraph[Mat] =
+    addAttributes(Attributes.asyncBoundary)
 }
 
 /**
@@ -472,7 +479,7 @@ trait FlowOps[+Out, +Mat] {
    * '''Cancels when''' downstream cancels
    *
    */
-  def map[T](f: Out ⇒ T): Repr[T] = andThen(Map(f))
+  def map[T](f: Out ⇒ T): Repr[T] = via(Map(f))
 
   /**
    * Transform each input element into an `Iterable` of output elements that is
@@ -778,6 +785,27 @@ trait FlowOps[+Out, +Mat] {
    * See also [[FlowOps.scan]]
    */
   def fold[T](zero: T)(f: (T, Out) ⇒ T): Repr[T] = via(Fold(zero, f))
+
+  /**
+   * Similar to `fold` but with an asynchronous function.
+   * Applies the given function towards its current and next value,
+   * yielding the next current value.
+   *
+   * If the function `f` returns a failure and the supervision decision is
+   * [[akka.stream.Supervision.Restart]] current value starts at `zero` again
+   * the stream will continue.
+   *
+   * '''Emits when''' upstream completes
+   *
+   * '''Backpressures when''' downstream backpressures
+   *
+   * '''Completes when''' upstream completes
+   *
+   * '''Cancels when''' downstream cancels
+   *
+   * See also [[FlowOps.fold]]
+   */
+  def foldAsync[T](zero: T)(f: (T, Out) ⇒ Future[T]): Repr[T] = via(new FoldAsync(zero, f))
 
   /**
    * Similar to `fold` but uses first element as zero element.
@@ -1822,6 +1850,14 @@ trait FlowOps[+Out, +Mat] {
 
   def named(name: String): Repr[Out]
 
+  /**
+   * Put an asynchronous boundary around this `Flow`.
+   *
+   * If this is a `SubFlow` (created e.g. by `groupBy`), this creates an
+   * asynchronous boundary around each materialized sub-flow, not the
+   * super-flow. That way, the super-flow will communicate with sub-flows
+   * asynchronously.
+   */
   def async: Repr[Out]
 
   /** INTERNAL API */

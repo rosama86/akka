@@ -64,7 +64,7 @@ The steps are exactly the same for everyone involved in the project (be it core 
 1. Create a branch on your fork and work on the feature. For example: `git checkout -b wip-custom-headers-akka-http`
    - Please make sure to follow the general quality guidelines (specified below) when developing your patch.
    - Please write additional tests covering your feature and adjust existing ones if needed before submitting your Pull Request. The `validatePullRequest` sbt task ([explained below](#validatePullRequest)) may come in handy to verify your changes are correct.
-1. Once your feature is complete, prepare the commit following our [commit message guidelines](#commit-message-guidelines). For example, a good commit message would be: `Adding compression support for Manifests #22222` (note the reference to the ticket it aimed to resolve).
+1. Once your feature is complete, prepare the commit following our [Creating Commits And Writing Commit Messages](#creating-commits-and-writing-commit-messages). For example, a good commit message would be: `Adding compression support for Manifests #22222` (note the reference to the ticket it aimed to resolve).
 1. Now it's finally time to [submit the Pull Request](https://help.github.com/articles/using-pull-requests)!
 1. If you have not already done so, you will be asked by our CLA bot to [sign the Lightbend CLA](http://www.lightbend.com/contribute/cla) online CLA stands for Contributor License Agreement and is a way of protecting intellectual property disputes from harming the project.
 1. If you're not already on the contributors white-list, the @akka-ci bot will ask `Can one of the repo owners verify this patch?`, to which a core member will reply by commenting `OK TO TEST`. This is just a sanity check to prevent malicious code from being run on the Jenkins cluster.
@@ -84,6 +84,8 @@ The TL;DR; of the above very precise workflow version is:
 4. Sign the CLA if necessary
 4. Keep polishing it until received enough LGTM
 5. Profit!
+
+Note that the Akka sbt project is large, so `sbt` needs to be run with lots of heap (1-2 Gb). This can be specified using a command line argument `sbt -mem 2048` or in the environment variable `SBT_OPTS` but then as a regular JVM memory flag, for example `SBT_OPTS=-Xmx2G`, on some platforms you can also edit the global defaults for sbt in `/usr/local/etc/sbtopts`.
 
 ## The `validatePullRequest` task
 
@@ -179,6 +181,19 @@ For more info, or for a starting point for new projects, look at the [Lightbend 
 
 For larger projects that have invested a lot of time and resources into their current documentation and samples scheme (like for example Play), it is understandable that it will take some time to migrate to this new model. In these cases someone from the project needs to take the responsibility of manual QA and verifier for the documentation and samples.
 
+### JavaDoc
+
+Akka generates JavaDoc-style API documentation using the [genjavadoc](https://github.com/typesafehub/genjavadoc) sbt plugin, since the sources are written mostly in Scala.
+
+Generating JavaDoc is not enabled by default, as it's not needed on day-to-day development as it's expected to just work.
+If you'd like to check if you links and formatting looks good in JavaDoc (and not only in ScalaDoc), you can generate it by running:
+
+```
+sbt -Dakka.genjavadoc.enabled=true javaunidoc:doc
+```
+
+Which will generate JavaDoc style docs in `./target/javaunidoc/index.html`
+
 ## External Dependencies
 
 All the external runtime dependencies for the project, including transitive dependencies, must have an open source license that is equal to, or compatible with, [Apache 2](http://www.apache.org/licenses/LICENSE-2.0).
@@ -224,7 +239,7 @@ Example:
 Akka uses [Jenkins GitHub pull request builder plugin](https://wiki.jenkins-ci.org/display/JENKINS/GitHub+pull+request+builder+plugin)
 that automatically merges the code, builds it, runs the tests and comments on the Pull Request in GitHub.
 
-Upon a submission of a Pull Request the Github pull request builder plugin will post a following comment:
+Upon a submission of a Pull Request the GitHub pull request builder plugin will post a following comment:
 
     Can one of the repo owners verify this patch?
 
@@ -257,6 +272,21 @@ Thus we ask Java contributions to follow these simple guidelines:
 - 2 spaces
 - `{` on same line as method name
 - in all other aspects, follow the [Oracle Java Style Guide](http://www.oracle.com/technetwork/java/codeconvtoc-136057.html)
+
+### Preferred ways to use timeouts in tests
+
+Avoid short test timeouts, since Jenkins server may GC heavily causing spurious test failures. GC pause or other hiccup of 2 seconds is common in our CI environment. Please note that usually giving a larger timeout *does not slow down the tests*, as in an `expectMessage` call for example it usually will complete quickly.
+
+There is a number of ways timeouts can be defined in Akka tests. The following ways to use timeouts are recommended (in order of preference): 
+
+* `remaining` is first choice (requires `within` block)
+* `remainingOrDefault` is second choice
+* `3.seconds` is third choice if not using testkit
+* lower timeouts must come with a very good reason (e.g. Awaiting on a known to be "already completed" `Future`)
+
+Special care should be given `expectNoMsg` calls, which indeed will wait the entire timeout before continuing, therefore a shorter timeout should be used in those, for example `200` or `300.millis`.
+
+You can read up on remaining and friends in [TestKit.scala](https://github.com/akka/akka/blob/master/akka-testkit/src/main/scala/akka/testkit/TestKit.scala)
 
 ## Contributing Modules
 
